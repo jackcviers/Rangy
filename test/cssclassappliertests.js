@@ -353,6 +353,9 @@ xn.test.suite("CSS Class Applier module tests", function(s) {
         t.assertEquals('<p>[One</p><div class="key">Two]</div>', htmlAndRangeToString(testEl, range));
     });
 
+/*
+    Has this test ever passed? I don't think it ever worked this way.
+
     s.test("Test multiple classes", function(t) {
         var applier1 = rangy.createCssClassApplier("c1"),
             applier2 = rangy.createCssClassApplier("c2");
@@ -368,22 +371,7 @@ xn.test.suite("CSS Class Applier module tests", function(s) {
         applier2.applyToRange(range);
         t.assertEquals('1<span class="c1">2</span><span class="c1 c2">[3]</span><span class="c1">4</span>5', htmlAndRangeToString(testEl, range));
     });
-
-    s.test("Test multiple classes 2", function(t) {
-        var applier1 = rangy.createCssClassApplier1("c1"),
-            applier2 = rangy.createCssClassApplier1("c2");
-
-        var testEl = document.getElementById("test");
-        var range = createRangeInHtml(testEl, "1[234]5");
-
-        applier1.applyToRange(range);
-        t.assertEquals('1<span class="c1 rangy_1">[234]</span>5', htmlAndRangeToString(testEl, range));
-
-        range.setStart(range.startContainer, range.startOffset + 1);
-        range.setEnd(range.endContainer, range.endOffset - 1);
-        applier2.applyToRange(range);
-        t.assertEquals('1<span class="c1 rangy_1">2</span><span class="c1 c2 rangy_1 rangy_2">[3]</span><span class="c1 rangy_1">4</span>5', htmlAndRangeToString(testEl, range));
-    });
+*/
 
     s.test("Test issue 50 (Mac double click)", function(t) {
         var applier = rangy.createCssClassApplier("c1");
@@ -513,6 +501,23 @@ xn.test.suite("CSS Class Applier module tests", function(s) {
         t.assertEquals('t<a class="c1" href="http://www.google.com/">[es]</a>t', htmlAndRangeToString(testEl, range));
     });
 
+    s.test("Test adding extra class", function(t) {
+        var applier = rangy.createCssClassApplier("c1", {
+            elementProperties: {
+                "className": "extra"
+            }
+        });
+
+        var testEl = document.getElementById("test");
+        var range = createRangeInHtml(testEl, 't[es]t');
+
+        applier.toggleRange(range);
+        t.assertEquals('t<span class="c1 extra">[es]</span>t', htmlAndRangeToString(testEl, range));
+
+        applier.toggleRange(range);
+        t.assertEquals('t[es]t', htmlAndRangeToString(testEl, range));
+    });
+
     s.test("Test range after two toggles", function(t) {
         var applier1 = rangy.createCssClassApplier("c1");
 
@@ -548,5 +553,141 @@ xn.test.suite("CSS Class Applier module tests", function(s) {
         //t.assertEquals('<span class="c1">[one]</span><br><br> two', htmlAndRangeToString(testEl, range));
     });
 
+    s.test("Test issue 101 (adding style properties)", function(t) {
+        var applier = rangy.createCssClassApplier("c1", {
+            elementTagName: "a",
+            elementProperties: {
+                href: "http://www.timdown.co.uk/",
+                style: {
+                    "fontWeight": "bold"
+                }
+            }
+        });
 
+        var testEl = document.getElementById("test");
+        testEl.innerHTML = "one";
+        var range = rangy.createRange();
+        range.selectNodeContents(testEl);
+        applier.toggleRange(range);
+        //alert(testEl.outerHTML)
+
+        var link = testEl.firstChild;
+        t.assertEquals(link.nodeName.toLowerCase(), "a");
+        t.assertEquals(link.href.toLowerCase(), "http://www.timdown.co.uk/");
+        t.assertEquals(link.style.fontWeight, "bold");
+
+        applier.toggleRange(range);
+        t.assertEquals(testEl.innerHTML, "one");
+    });
+
+    s.test("Issue 111 (extra option for useExistingElements)", function(t) {
+        var applier = rangy.createCssClassApplier("c1", {
+            useExistingElements: true
+        });
+
+        var testEl = document.getElementById("test");
+        var range = createRangeInHtml(testEl, 'x[1<span class="c2">2</span>3]x');
+        applier.applyToRange(range);
+        t.assertEquals('x<span class="c1">[1</span><span class="c1 c2">2</span><span class="c1">3]</span>x', htmlAndRangeToString(testEl, range));
+        applier.undoToRange(range);
+        t.assertEquals('x[1<span class="c2">2</span>3]x', htmlAndRangeToString(testEl, range));
+
+        applier = rangy.createCssClassApplier("c1", {
+            useExistingElements: false
+        });
+
+        applier.applyToRange(range);
+        t.assertEquals('x<span class="c1">[1</span><span class="c2"><span class="c1">2</span></span><span class="c1">3]</span>x', htmlAndRangeToString(testEl, range));
+        applier.undoToRange(range);
+        t.assertEquals('x[1<span class="c2">2</span>3]x', htmlAndRangeToString(testEl, range));
+    });
+
+    s.test("Issue 139 (Merge bug)", function(t) {
+        var applier = rangy.createCssClassApplier("test");
+        var testEl = document.getElementById("test");
+        var range = createRangeInHtml(testEl, '<div><span class="test">[1<span class="test"></span></span> 2]</div>');
+        applier.applyToRange(range);
+        t.assertEquals('<div><span class="test">[1 2]</span></div>', htmlAndRangeToString(testEl, range));
+    });
+
+    s.test("Undo to range with empty span with class", function(t) {
+        var applier = rangy.createCssClassApplier("test");
+        var testEl = document.getElementById("test");
+        var range = createRangeInHtml(testEl, '<div>[1<span class="test"><span class="test"></span></span>2]</div>');
+        applier.undoToRange(range);
+        t.assertEquals('<div>[12]</div>', htmlAndRangeToString(testEl, range));
+    });
+
+    s.test("Issue 148 (isAppliedToRange on range containing just an image)", function(t) {
+        var applier = rangy.createCssClassApplier("test");
+        var testEl = document.getElementById("test");
+
+        var range = createRangeInHtml(testEl, 'one [] two');
+        t.assertFalse(applier.isAppliedToRange(range));
+        range = createRangeInHtml(testEl, 'one [<img src="fake.png">] two');
+        t.assertFalse(applier.isAppliedToRange(range));
+
+        range = createRangeInHtml(testEl, '<span class="test">one [] two</span>');
+        t.assert(applier.isAppliedToRange(range));
+        range = createRangeInHtml(testEl, '<span class="test">one [<img src="fake.png">] two</span>');
+        t.assert(applier.isAppliedToRange(range));
+    });
+
+    if (rangy.features.selectionSupportsMultipleRanges) {
+        s.test("Undo to multiple ranges", function(t) {
+            var testEl = document.getElementById("test");
+            testEl.innerHTML = "<b>12</b>345";
+            var applier = rangy.createCssClassApplier("c1");
+
+            var textNode1 = testEl.firstChild.firstChild;
+            var textNode2 = testEl.lastChild;
+
+            var range1 = rangy.createRange();
+            range1.setStartAndEnd(textNode1, 1, textNode2, 1);
+
+            var range2 = rangy.createRange();
+            range2.setStartAndEnd(textNode2, 2, 3);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+
+            applier.applyToRanges([range1, range2]);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+
+            applier.undoToRanges([range2, range2]);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+        });
+
+        s.test("Undo to multiple ranges reverse order", function(t) {
+            var testEl = document.getElementById("test");
+            testEl.innerHTML = "<b>12</b>345";
+            var applier = rangy.createCssClassApplier("c1");
+
+            var textNode1 = testEl.firstChild.firstChild;
+            var textNode2 = testEl.lastChild;
+
+            var range1 = rangy.createRange();
+            range1.setStartAndEnd(textNode1, 1, textNode2, 1);
+
+            var range2 = rangy.createRange();
+            range2.setStartAndEnd(textNode2, 2, 3);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+
+            applier.applyToRanges([range2, range1]);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+
+            applier.undoToRanges([range2, range1]);
+
+            t.assertEquals(range1.toString(), "23");
+            t.assertEquals(range2.toString(), "5");
+        });
+    }
 }, false);

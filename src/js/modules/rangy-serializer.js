@@ -1,5 +1,5 @@
 /**
- * @license Serializer module for Rangy.
+ * Serializer module for Rangy.
  * Serializes Ranges and Selections. An example use would be to store a user's selection on a particular page in a
  * cookie or local storage and restore it on the user's next visit to the same page.
  *
@@ -131,11 +131,8 @@ rangy.createModule("Serializer", function(api, module) {
     }
 
     function deserializePosition(serialized, rootNode, doc) {
-        if (rootNode) {
-            doc = doc || dom.getDocument(rootNode);
-        } else {
-            doc = doc || document;
-            rootNode = doc.documentElement;
+        if (!rootNode) {
+            rootNode = (doc || document).documentElement;
         }
         var bits = serialized.split(":");
         var node = rootNode;
@@ -156,7 +153,7 @@ rangy.createModule("Serializer", function(api, module) {
 
     function serializeRange(range, omitChecksum, rootNode) {
         rootNode = rootNode || api.DomRange.getRangeDocument(range).documentElement;
-        if (!dom.isAncestorOf(rootNode, range.commonAncestorContainer, true)) {
+        if (!dom.isOrIsAncestorOf(rootNode, range.commonAncestorContainer)) {
             throw module.createError("serializeRange(): range " + range.inspect() +
                 " is not wholly contained within specified root node " + dom.inspectNode(rootNode));
         }
@@ -175,7 +172,7 @@ rangy.createModule("Serializer", function(api, module) {
             doc = doc || document;
             rootNode = doc.documentElement;
         }
-        var result = /^([^,]+),([^,\{]+)({([^}]+)})?$/.exec(serialized);
+        var result = /^([^,]+),([^,\{]+)(\{([^}]+)\})?$/.exec(serialized);
         var checksum = result[4], rootNodeChecksum = getElementChecksum(rootNode);
         if (checksum && checksum !== getElementChecksum(rootNode)) {
             throw module.createError("deserializeRange(): checksums of serialized range root node (" + checksum +
@@ -183,19 +180,15 @@ rangy.createModule("Serializer", function(api, module) {
         }
         var start = deserializePosition(result[1], rootNode, doc), end = deserializePosition(result[2], rootNode, doc);
         var range = api.createRange(doc);
-        range.setStart(start.node, start.offset);
-        range.setEnd(end.node, end.offset);
+        range.setStartAndEnd(start.node, start.offset, end.node, end.offset);
         return range;
     }
 
     function canDeserializeRange(serialized, rootNode, doc) {
-        if (rootNode) {
-            doc = doc || dom.getDocument(rootNode);
-        } else {
-            doc = doc || document;
-            rootNode = doc.documentElement;
+        if (!rootNode) {
+            rootNode = (doc || document).documentElement;
         }
-        var result = /^([^,]+),([^,]+)({([^}]+)})?$/.exec(serialized);
+        var result = /^([^,]+),([^,]+)(\{([^}]+)\})?$/.exec(serialized);
         var checksum = result[3];
         return !checksum || checksum === getElementChecksum(rootNode);
     }
@@ -267,7 +260,7 @@ rangy.createModule("Serializer", function(api, module) {
         win = win || window;
         var serialized = getSerializedSelectionFromCookie(win.document.cookie);
         if (serialized) {
-            deserializeSelection(serialized, win.doc)
+            deserializeSelection(serialized, win.doc);
         }
     }
 

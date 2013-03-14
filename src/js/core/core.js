@@ -1,5 +1,5 @@
 /**
- * @license Rangy, a cross-browser JavaScript range and selection library
+ * Rangy, a cross-browser JavaScript range and selection library
  * http://code.google.com/p/rangy/
  *
  * Copyright %%build:year%%, Tim Down
@@ -7,13 +7,17 @@
  * Version: %%build:version%%
  * Build date: %%build:date%%
  */
-window["rangy"] = (function() {
+
+var rangy;
+rangy = rangy || (function() {
     var log = log4javascript.getLogger("rangy.core");
 
     var OBJECT = "object", FUNCTION = "function", UNDEFINED = "undefined";
 
+    // Minimal set of properties required for DOM Level 2 Range compliance. Comparison constants such as START_TO_START
+    // are omitted because ranges in KHTML do not have them but otherwise work perfectly well. See issue 113.
     var domRangeProperties = ["startContainer", "startOffset", "endContainer", "endOffset", "collapsed",
-        "commonAncestorContainer", "START_TO_START", "START_TO_END", "END_TO_START", "END_TO_END"];
+        "commonAncestorContainer"];
 
     // Minimal set of methods required for DOM Level 2 Range compliance
     var domRangeMethods = ["setStart", "setStartBefore", "setStartAfter", "setEnd", "setEndBefore",
@@ -64,7 +68,13 @@ window["rangy"] = (function() {
     function isTextRange(range) {
         return range && areHostMethods(range, textRangeMethods) && areHostProperties(range, textRangeProperties);
     }
+    
+    function getBody(doc) {
+        return isHostObject(doc, "body") ? doc.body : doc.getElementsByTagName("body")[0];
+    }
 
+    var modules = {};
+    
     var api = {
         version: "%%build:version%%",
         initialized: false,
@@ -77,12 +87,13 @@ window["rangy"] = (function() {
             areHostMethods: areHostMethods,
             areHostObjects: areHostObjects,
             areHostProperties: areHostProperties,
-            isTextRange: isTextRange
+            isTextRange: isTextRange,
+            getBody: getBody
         },
 
         features: {},
 
-        modules: {},
+        modules: modules,
         config: {
             alertOnFail: true,
             alertOnWarn: false,
@@ -90,11 +101,17 @@ window["rangy"] = (function() {
         }
     };
 
+    function consoleLog(msg) {
+        if (isHostObject(window, "console") && isHostMethod(window.console, "log")) {
+            window.console.log(msg);
+        }
+    }
+
     function alertOrLog(msg, shouldAlert) {
         if (shouldAlert) {
             window.alert(msg);
-        } else if (typeof window.console != UNDEFINED && typeof window.console.log != UNDEFINED) {
-            window.console.log(msg);
+        } else  {
+            consoleLog(msg);
         }
     }
 
@@ -114,19 +131,75 @@ window["rangy"] = (function() {
 
     // Add utility extend() method
     if ({}.hasOwnProperty) {
-        api.util.extend = function(o, props) {
+        api.util.extend = function(obj, props, deep) {
+            var o, p;
             for (var i in props) {
                 if (props.hasOwnProperty(i)) {
-                    o[i] = props[i];
+                    o = obj[i];
+                    p = props[i];
+                    //if (deep) alert([o !== null, typeof o == "object", p !== null, typeof p == "object"])
+                    if (deep && o !== null && typeof o == "object" && p !== null && typeof p == "object") {
+                        api.util.extend(o, p, true);
+                    }
+                    obj[i] = p;
                 }
             }
+            return obj;
         };
     } else {
         fail("hasOwnProperty not supported");
     }
 
+    // Test whether Array.prototype.slice can be relied on for NodeLists and use an alternative toArray() if not
+    (function() {
+        var el = document.createElement("div");
+        el.appendChild(document.createElement("span"));
+        var slice = [].slice;
+        var toArray;
+        try {
+            if (slice.call(el.childNodes, 0)[0].nodeType == 1) {
+                toArray = function(arrayLike) {
+                    return slice.call(arrayLike, 0);
+                };
+            }
+        } catch (e) {}
+
+        if (!toArray) {
+            toArray = function(arrayLike) {
+                var arr = [];
+                for (var i = 0, len = arrayLike.length; i < len; ++i) {
+                    arr[i] = arrayLike[i];
+                }
+                return arr;
+            };
+        }
+
+        api.util.toArray = toArray;
+    })();
+
+
+    // Very simple event handler wrapper function that doesn't attempt to solve issue such as "this" handling or
+    // normalization of event properties
+    var addListener;
+    if (isHostMethod(document, "addEventListener")) {
+        addListener = function(obj, eventType, listener) {
+            obj.addEventListener(eventType, listener, false);
+        };
+    } else if (isHostMethod(document, "attachEvent")) {
+        addListener = function(obj, eventType, listener) {
+            obj.attachEvent("on" + eventType, listener);
+        };
+    } else {
+        fail("Document does not have required addEventListener or attachEvent method");
+    }
+    
+    api.util.addListener = addListener;
+
     var initListeners = [];
-    var moduleInitializers = [];
+    
+    function getErrorDesc(ex) {
+        return ex.message || ex.description || String(ex);
+    }
 
     // Initialization
     function init() {
@@ -146,7 +219,11 @@ window["rangy"] = (function() {
             testRange.detach();
         }
 
-        var body = isHostObject(document, "body") ? document.body : document.getElementsByTagName("body")[0];
+        var body = getBody(document);
+        if (!body || body.nodeName.toLowerCase() != "body") {
+            fail("No body element found");
+            return;
+        }
 
         if (body && isHostMethod(body, "createTextRange")) {
             testRange = body.createTextRange();
@@ -157,6 +234,7 @@ window["rangy"] = (function() {
 
         if (!implementsDomRange && !implementsTextRange) {
             fail("Neither Range nor TextRange are available");
+            return;
         }
 
         api.initialized = true;
@@ -165,16 +243,22 @@ window["rangy"] = (function() {
             implementsTextRange: implementsTextRange
         };
 
-        // Initialize modules and call init listeners
-        var allListeners = moduleInitializers.concat(initListeners);
-        for (var i = 0, len = allListeners.length; i < len; ++i) {
+        // Initialize modules
+        var module, errorMessage;
+        for (var moduleName in modules) {
+            if ( (module = modules[moduleName]) instanceof Module ) {
+                module.init();
+            }
+        }
+        
+        // Call init listeners
+        for (var i = 0, len = initListeners.length; i < len; ++i) {
             try {
-                allListeners[i](api);
+                initListeners[i](api);
             } catch (ex) {
-                if (isHostObject(window, "console") && isHostMethod(window.console, "log")) {
-                    window.console.log("Init listener threw an exception. Continuing.", ex);
-                }
-                log.error("Init listener threw an exception. Continuing.", ex);
+                errorMessage = "Rangy init listener threw an exception. Continuing. Detail: " + getErrorDesc(ex);
+                log.error(errorMessage, ex);
+                consoleLog(errorMessage);
             }
         }
     }
@@ -209,58 +293,79 @@ window["rangy"] = (function() {
 
     api.createMissingNativeApi = createMissingNativeApi;
 
-    /**
-     * @constructor
-     */
-    function Module(name) {
+    function Module(name, initializer) {
         this.name = name;
         this.initialized = false;
         this.supported = false;
+        this.init = initializer;
     }
 
-    Module.prototype.fail = function(reason) {
-        this.initialized = true;
-        this.supported = false;
-        log.error("Module '" + this.name + "' failed to load: " + reason);
-        throw new Error("Module '" + this.name + "' failed to load: " + reason);
-    };
+    Module.prototype = {
+        fail: function(reason) {
+            this.initialized = true;
+            this.supported = false;
+            log.error("Module '" + this.name + "' failed to load: " + reason);
+            throw new Error("Module '" + this.name + "' failed to load: " + reason);
+        },
 
-    Module.prototype.warn = function(msg) {
-        api.warn("Module " + this.name + ": " + msg);
-    };
+        warn: function(msg) {
+            api.warn("Module " + this.name + ": " + msg);
+        },
 
-    Module.prototype.deprecationNotice = function(deprecated, replacement) {
-        api.warn("DEPRECATED: " + deprecated + " in module " + this.name + "is deprecated. Please use "
-            + replacement + " instead");
-    };
+        deprecationNotice: function(deprecated, replacement) {
+            api.warn("DEPRECATED: " + deprecated + " in module " + this.name + "is deprecated. Please use "
+                + replacement + " instead");
+        },
 
-    Module.prototype.createError = function(msg) {
-        return new Error("Error in Rangy " + this.name + " module: " + msg);
+        createError: function(msg) {
+            return new Error("Error in Rangy " + this.name + " module: " + msg);
+        }
     };
 
     api.createModule = function(name, initFunc) {
-        var module = new Module(name);
-        api.modules[name] = module;
-
-        moduleInitializers.push(function(api) {
-            initFunc(api, module);
-            module.initialized = true;
-            module.supported = true;
+        var module = new Module(name, function() {
+            if (!module.initialized) {
+                module.initialized = true;
+                try {
+                    initFunc(api, module);
+                    module.supported = true;
+                } catch (ex) {
+                    var errorMessage = "Module '" + name + "' failed to load: " + getErrorDesc(ex);
+                    log.error(errorMessage, ex);
+                    consoleLog(errorMessage);
+                }
+            }
         });
+        modules[name] = module;
     };
 
-    api.requireModules = function(modules) {
-        for (var i = 0, len = modules.length, module, moduleName; i < len; ++i) {
-            moduleName = modules[i];
-            module = api.modules[moduleName];
+    api.requireModules = function(moduleNames) {
+        for (var i = 0, len = moduleNames.length, module, moduleName; i < len; ++i) {
+            moduleName = moduleNames[i];
+            
+            module = modules[moduleName];
             if (!module || !(module instanceof Module)) {
-                throw new Error("Module '" + moduleName + "' not found");
+                throw new Error("required module '" + moduleName + "' not found");
             }
+
+            module.init();
+            
             if (!module.supported) {
-                throw new Error("Module '" + moduleName + "' not supported");
+                throw new Error("required module '" + moduleName + "' not supported");
             }
         }
     };
+
+    /*----------------------------------------------------------------------------------------------------------------*/
+
+    // Ensure rangy.rangePrototype and rangy.selectionPrototype are available immediately
+
+    function RangePrototype() {}
+    api.RangePrototype = RangePrototype;
+    api.rangePrototype = new RangePrototype();
+
+    function SelectionPrototype() {}
+    api.selectionPrototype = new SelectionPrototype();
 
     /*----------------------------------------------------------------------------------------------------------------*/
 
@@ -293,13 +398,7 @@ window["rangy"] = (function() {
     }
 
     // Add a fallback in case the DOMContentLoaded event isn't supported
-    if (isHostMethod(window, "addEventListener")) {
-        window.addEventListener("load", loadHandler, false);
-    } else if (isHostMethod(window, "attachEvent")) {
-        window.attachEvent("onload", loadHandler);
-    } else {
-        fail("Window does not have required addEventListener or attachEvent method");
-    }
+    addListener(window, "load", loadHandler);
 
     return api;
 })();

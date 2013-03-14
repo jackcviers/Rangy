@@ -1,7 +1,6 @@
 /**
- * @license Utilities module for Rangy.
- * A collection of common selection and range-related tasks, using Rangy. The intention is that each method is
- * self-contained and could be copied and pasted elsewhere and still work.
+ * Utilities module for Rangy.
+ * A collection of common selection and range-related tasks, using Rangy.
  *
  * Part of Rangy, a cross-browser JavaScript range and selection library
  * http://code.google.com/p/rangy/
@@ -18,14 +17,6 @@ rangy.createModule("Util", function(api, module) {
 
     var rangeProto = api.rangePrototype;
     var selProto = api.selectionPrototype;
-
-    /**
-     * Convenience method to select a range. Any existing selection will be removed.
-     */
-    rangeProto.select = function() {
-        var sel = api.getSelection(this.getDocument());
-        sel.setSingleRange(this);
-    };
 
     selProto.pasteText = function(text) {
         this.deleteFromDocument();
@@ -59,35 +50,66 @@ rangy.createModule("Util", function(api, module) {
         this.insertNode(frag);
     };
 
-    /**
-     * Convenience method to set a range's start and end boundaries. Overloaded as follows:
-     * - Two parameters (node, offset) creates a collapsed range at that position
-     * - three parameters (node, startOffset, endOffset) creates a range contained with node starting at startOffset
-     *   and ending at endOffset
-     * - Four parameters (startNode, startOffset, endNode, endOffset) creates a range starting at startOffset in
-     *   startNode and ending at endOffset in endNode
-     */
-    rangeProto.setStartAndEnd = function() {
-        var args = arguments;
-        this.setStart(args[0], args[1]);
-        switch (args.length) {
-            case 2:
-                this.collapse(true);
-                break;
-            case 3:
-                this.setEnd(args[0], args[2]);
-                break;
-            case 4:
-                this.setEnd(args[2], args[3]);
-                break;
-        }
-    };
-
     selProto.selectNodeContents = function(node) {
         var range = api.createRange(this.win);
         range.selectNodeContents(node);
         this.setSingleRange(range);
     };
+
+    api.createRangeFromNode = function(node) {
+        var range = api.createRange(node);
+        range.selectNode(node);
+        return range;
+    };
+
+    api.createRangeFromNodeContents = function(node) {
+        var range = api.createRange(node);
+        range.selectNodeContents(node);
+        return range;
+    };
+
+    api.selectNodeContents = function(node) {
+        api.getSelection().selectNodeContents(node);
+    };
+
+
+    /**
+     * Convenience method to select a range. Any existing selection will be removed.
+     */
+    rangeProto.select = function(direction) {
+        api.getSelection( this.getDocument() ).setSingleRange(this, direction);
+    };
+
+    rangeProto.selectSelectedTextElements = (function() {
+        function isInlineElement(node) {
+            return node.nodeType == 1 && api.dom.getComputedStyleProperty(node, "display") == "inline";
+        }
+
+        function getOutermostNodeContainingText(range, node) {
+            var outerNode = null;
+            var nodeRange = range.cloneRange();
+            nodeRange.selectNode(node);
+            if (nodeRange.toString() !== "") {
+                while ( (node = node.parentNode) && isInlineElement(node) && range.containsNodeText(node) ) {
+                    outerNode = node;
+                }
+            }
+            nodeRange.detach();
+            return outerNode;
+        }
+
+        return function() {
+            var startNode = getOutermostNodeContainingText(this, this.startContainer);
+            if (startNode) {
+                this.setStartBefore(startNode);
+            }
+
+            var endNode = getOutermostNodeContainingText(this, this.endContainer);
+            if (endNode) {
+                this.setEndAfter(endNode);
+            }
+        };
+    })();
 
     // TODO: simple selection save/restore
 });

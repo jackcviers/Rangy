@@ -143,6 +143,8 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
         }, setUp_noRangeCheck, tearDown_noRangeCheck);
 
         if (rangy.features.selectionSupportsMultipleRanges) {
+            // Next test no longer applies
+/*
             s.test("removeRange multiple instances of same range test", function(t) {
                 var sel = selectionCreator(win);
                 sel.removeAllRanges();
@@ -156,6 +158,7 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
                 sel.removeRange(range);
                 t.assertEquals(sel.rangeCount, 0);
             }, setUp_noRangeCheck, tearDown_noRangeCheck);
+*/
 
             s.test("Multiple ranges test", function(t) {
                 var sel = selectionCreator(win);
@@ -203,7 +206,6 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
             range.selectNodeContents(t.nodes.plainText);
             sel.addRange(range);
             t.assert(DomRange.rangesEqual(range, sel.getRangeAt(0)));
-            t.assertEquivalent(range, sel.getRangeAt(0));
         }, setUp_noRangeCheck, tearDown_noRangeCheck);
 
         if (rangy.features.collapsedNonEditableSelectionsSupported) {
@@ -445,13 +447,15 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
         function testRefresh(name, testRangeCreator) {
             s.test("Refresh test: " + name, function(t) {
                 var sel = selectionCreator(win);
-                var range = testRangeCreator(t);
-                sel.removeAllRanges();
-                sel.addRange(range);
-                sel.refresh();
-                t.assertEquals(sel.rangeCount, 1);
-                var selRange = sel.getRangeAt(0);
-                t.assert(DomRange.rangesEqual(range, selRange), "Ranges not equal. Original: " + DomRange.inspect(range) + ", refreshed selection range: " + DomRange.inspect(selRange));
+                if (sel.refresh) {
+                    var range = testRangeCreator(t);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    sel.refresh();
+                    t.assertEquals(sel.rangeCount, 1);
+                    var selRange = sel.getRangeAt(0);
+                    t.assert(DomRange.rangesEqual(range, selRange), "Ranges not equal. Original: " + DomRange.inspect(range) + ", refreshed selection range: " + DomRange.inspect(selRange));
+                }
             });
         }
 
@@ -479,42 +483,48 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
         testRefresh("collapsed selection mid text node", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.boldAndItalicText, 1);
+            range.setStart(t.nodes.boldAndItalicText, 1);
+            range.collapse(true);
             return range;
         });
 
         testRefresh("collapsed selection start of text node", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.boldAndItalicText, 0);
+            range.setStart(t.nodes.boldAndItalicText, 0);
+            range.collapse(true);
             return range;
         });
 
         testRefresh("collapsed selection end of text node", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.boldAndItalicText, t.nodes.boldAndItalicText.length);
+            range.setStart(t.nodes.boldAndItalicText, t.nodes.boldAndItalicText.length);
+            range.collapse(true);
             return range;
         });
 
         testRefresh("collapsed selection immediately prior to element", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.b, 1);
+            range.setStart(t.nodes.b, 1);
+            range.collapse(true);
             return range;
         });
 
         testRefresh("collapsed selection immediately after element", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.b, 2);
+            range.setStart(t.nodes.b, 2);
+            range.collapse(true);
             return range;
         });
 
         testRefresh("collapsed selection at offset 0 in element", function(t) {
             var range = rangeCreator(doc);
             t.nodes.div.contentEditable = true;
-            range.collapseToPoint(t.nodes.b, 0);
+            range.setStart(t.nodes.b, 0);
+            range.collapse(true);
             return range;
         });
 
@@ -526,6 +536,60 @@ function testSelectionAndRangeCreators(wins, winName, selectionCreator, selectio
             return range;
         });
 
+        s.test("Refresh check for changes test", function(t) {
+            var sel = selectionCreator(win);
+            if (sel.refresh && sel.nativeSelection.selectAllChildren) {
+                t.assertFalse(sel.refresh(true));
+
+                sel.nativeSelection.selectAllChildren(t.nodes.div);
+                t.assertTrue(sel.refresh(true));
+                t.assertFalse(sel.refresh(true));
+
+                sel.collapseToEnd();
+                t.assertFalse(sel.refresh(true));
+            }
+        });
+
+        s.test("Selection and range independence: addRange", function(t) {
+            var sel = selectionCreator(win);
+            if (sel.setSingleRange) {
+                var range = rangeCreator(doc);
+                range.setStart(t.nodes.plainText, 0);
+                range.collapse(true);
+                sel.setSingleRange(range);
+                range.selectNodeContents(t.nodes.plainText);
+                sel.refresh();
+                t.assert(sel.isCollapsed);
+            }
+        });
+
+        s.test("Selection and range independence: getRangeAt", function(t) {
+            var sel = selectionCreator(win);
+            if (sel.setSingleRange) {
+                var range = rangeCreator(doc);
+                range.setStart(t.nodes.plainText, 0);
+                range.collapse(true);
+                sel.setSingleRange(range);
+                sel.refresh();
+
+                var selRange = sel.getRangeAt(0);
+                selRange.selectNodeContents(t.nodes.div);
+                sel.refresh();
+                t.assert(sel.isCollapsed);
+            }
+        });
+
+        if (testSelection.toHtml) {
+            s.test("toHtml", function(t) {
+                var sel = selectionCreator(win);
+                var range = rangeCreator(doc);
+                range.setStart(t.nodes.plainText, 0);
+                range.setEnd(t.nodes.plainText, t.nodes.plainText.length);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                t.assertEquals(sel.toHtml(), t.nodes.plainText.data);
+            });
+        }
     }, false);
 }
 
@@ -602,7 +666,20 @@ xn.addEventListener(window, "load", function() {
     iframeWin[0] = win;
 });
 
+var hasRangySelectionPrototype = "rangePrototype" in rangy;
+rangy.selectionPrototype.preInitTest = function() {
+    return true;
+};
+
 xn.test.suite("Miscellaneous selection tests", function(s) {
+    s.test("rangy.selectionPrototype existence test", function(t) {
+        t.assert(hasRangySelectionPrototype);
+    });
+
+    s.test("Selection prototype pre-init extension", function(t) {
+        t.assert(rangy.getSelection().preInitTest(), "test");
+    });
+
     s.test("Selection prototype extension", function(t) {
         rangy.selectionPrototype.fooBar = "test";
 
