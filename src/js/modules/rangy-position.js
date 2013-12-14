@@ -12,13 +12,12 @@
  * Version: %%build:version%%
  * Build date: %%build:date%%
  */
-rangy.createModule("Position", function(api, module) {
-    api.requireModules( ["WrappedSelection", "WrappedRange"] );
-
+rangy.createModule("Position", ["WrappedSelection"], function(api, module) {
     //var log = log4javascript.getLogger("rangy.position");
 
     var NUMBER = "number", UNDEF = "undefined";
     var WrappedRange = api.WrappedRange;
+    var WrappedTextRange = api.WrappedTextRange;
     var dom = api.dom, util = api.util, DomPosition = dom.DomPosition;
     
     // Feature detection
@@ -280,7 +279,7 @@ rangy.createModule("Position", function(api, module) {
     if (api.features.implementsTextRange && elementSupportsGetBoundingClientRect) {
         rangeProto.getBoundingClientRect = function() {
             // We need a TextRange
-            var textRange = WrappedRange.rangeToTextRange(this);
+            var textRange = WrappedTextRange.rangeToTextRange(this);
 
             // Work around table problems (table cell bounding rects seem not to count if TextRange spans cells)
             var cells = this.getNodes([1], function(el) {
@@ -303,7 +302,7 @@ rangy.createModule("Position", function(api, module) {
                             subRange.setStartAfter(lastTable);
                         }
                         subRange.setEndBefore(table);
-                        rects.push(WrappedRange.rangeToTextRange(subRange).getBoundingClientRect());
+                        rects.push(WrappedTextRange.rangeToTextRange(subRange).getBoundingClientRect());
                     }
 
                     if (this.containsNode(cell)) {
@@ -326,7 +325,7 @@ rangy.createModule("Position", function(api, module) {
                 if (!endTable && lastTable) {
                     subRange = this.cloneRange();
                     subRange.setStartAfter(lastTable);
-                    rects.push(WrappedRange.rangeToTextRange(subRange).getBoundingClientRect());
+                    rects.push(WrappedTextRange.rangeToTextRange(subRange).getBoundingClientRect());
                 }
                 rect = mergeRects(rects);
             } else {

@@ -9,9 +9,7 @@
  * Version: %%build:version%%
  * Build date: %%build:date%%
  */
-rangy.createModule("Highlighter", function(api, module) {
-    api.requireModules( ["CssClassApplier"] );
-
+rangy.createModule("Highlighter", ["ClassApplier"], function(api, module) {
     var log = log4javascript.getLogger("rangy.Highlighter");
     var dom = api.dom;
     var contains = dom.arrayContains;
@@ -317,7 +315,7 @@ rangy.createModule("Highlighter", function(api, module) {
                 }
             }
 
-            var charRange, highlightCharRange, highlightRange, merged;
+            var charRange, highlightCharRange, merged;
             for (i = 0, len = charRanges.length; i < len; ++i) {
                 charRange = charRanges[i];
                 merged = false;
@@ -386,7 +384,6 @@ rangy.createModule("Highlighter", function(api, module) {
             var converter = this.converter;
             selection = selection || api.getSelection();
             var classApplier = this.classAppliers[className];
-            var highlights = this.highlights;
             var doc = selection.win.document;
             var containerElement = containerElementId ? doc.getElementById(containerElementId) : getBody(doc);
 
@@ -416,11 +413,16 @@ rangy.createModule("Highlighter", function(api, module) {
             var intersectingHighlights = this.getIntersectingHighlights( selection.getAllRanges() );
             this.removeHighlights(intersectingHighlights);
             selection.removeAllRanges();
+            return intersectingHighlights;
+        },
+
+        getHighlightsInSelection: function(selection) {
+            selection = selection || api.getSelection();
+            return this.getIntersectingHighlights(selection.getAllRanges());
         },
 
         selectionOverlapsHighlight: function(selection) {
-            selection = selection || api.getSelection();
-            return this.getIntersectingHighlights(selection.getAllRanges()).length > 0;
+            return this.getHighlightsInSelection(selection).length > 0;
         },
 
         serialize: function(options) {
@@ -480,7 +482,12 @@ rangy.createModule("Highlighter", function(api, module) {
                     );
                 }
 
-                classApplier = this.classAppliers[parts[3]];
+                classApplier = this.classAppliers[ parts[3] ];
+                
+                if (!classApplier) {
+                    throw new Error("No class applier found for class '" + parts[3] + "'");
+                }
+
                 highlight = new Highlight(this.doc, characterRange, classApplier, this.converter, parseInt(parts[2]), containerElementId);
                 highlight.apply();
                 highlights.push(highlight);

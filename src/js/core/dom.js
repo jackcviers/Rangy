@@ -1,4 +1,4 @@
-rangy.createModule("DomUtil", function(api, module) {
+rangy.createCoreModule("DomUtil", [], function(api, module) {
     var log = log4javascript.getLogger("rangy.dom");
     var UNDEF = "undefined";
     var util = api.util;
@@ -272,9 +272,13 @@ rangy.createModule("DomUtil", function(api, module) {
             // Case 3: node C (container A or an ancestor) is a child node of B
             return getNodeIndex(nodeC) < offsetB  ? -1 : 1;
         } else {
-            log.debug("case 4");
-            // Case 4: containers are siblings or descendants of siblings
             root = getCommonAncestor(nodeA, nodeB);
+            if (!root) {
+                throw new Error("comparePoints error: nodes have no common ancestor");
+            }
+
+            // Case 4: containers are siblings or descendants of siblings
+            log.debug("case 4");
             childA = (nodeA === root) ? root : getClosestAncestorIn(nodeA, root, true);
             childB = (nodeB === root) ? root : getClosestAncestorIn(nodeB, root, true);
 
@@ -334,7 +338,7 @@ rangy.createModule("DomUtil", function(api, module) {
         }
         if (node.nodeType == 1) {
             var idAttr = node.id ? ' id="' + node.id + '"' : "";
-            return "<" + node.nodeName + idAttr + ">[" + node.childNodes.length + "][" + node.innerHTML.slice(0, 20) + "]";
+            return "<" + node.nodeName + idAttr + ">[" + getNodeIndex(node) + "][" + node.childNodes.length + "][" + (node.innerHTML || "[innerHTML not supported]").slice(0, 25) + "]";
         }
         return node.nodeName;
     }

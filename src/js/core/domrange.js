@@ -1,6 +1,4 @@
-rangy.createModule("DomRange", function(api, module) {
-    api.requireModules( ["DomUtil"] );
-
+rangy.createCoreModule("DomRange", ["DomUtil"], function(api, module) {
     var log = log4javascript.getLogger("rangy.DomRange");
     var dom = api.dom;
     var util = api.util;
@@ -166,9 +164,25 @@ rangy.createModule("DomRange", function(api, module) {
 
         var nodes = [];
         iterateSubtree(new RangeIterator(range, false), function(node) {
-            if ((!filterNodeTypes || regex.test(node.nodeType)) && (!filterExists || filter(node))) {
-                nodes.push(node);
+            if (filterNodeTypes && !regex.test(node.nodeType)) {
+                return;
             }
+            if (filterExists && !filter(node)) {
+                return;
+            }
+            // Don't include a boundary container if it is a character data node and the range does not contain any
+            // of its character data. See issue 190.
+            var sc = range.startContainer;
+            if (node == sc && isCharacterDataNode(sc) && range.startOffset == sc.length) {
+                return;
+            }
+
+            var ec = range.endContainer;
+            if (node == ec && isCharacterDataNode(ec) && range.endOffset == 0) {
+                return;
+            }
+
+            nodes.push(node);
         });
         return nodes;
     }
@@ -645,16 +659,16 @@ rangy.createModule("DomRange", function(api, module) {
             if (sc === this.endContainer && isCharacterDataNode(sc)) {
                 return (sc.nodeType == 3 || sc.nodeType == 4) ? sc.data.slice(this.startOffset, this.endOffset) : "";
             } else {
-                var textBits = [], iterator = new RangeIterator(this, true);
+                var textParts = [], iterator = new RangeIterator(this, true);
                 log.info("toString iterator: " + dom.inspectNode(iterator._first) + ", " + dom.inspectNode(iterator._last));
                 iterateSubtree(iterator, function(node) {
                     // Accept only text or CDATA nodes, not comments
                     if (node.nodeType == 3 || node.nodeType == 4) {
-                        textBits.push(node.data);
+                        textParts.push(node.data);
                     }
                 });
                 iterator.detach();
-                return textBits.join("");
+                return textParts.join("");
             }
         },
 

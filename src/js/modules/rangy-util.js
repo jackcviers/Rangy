@@ -12,9 +12,7 @@
  * Version: %%build:version%%
  * Build date: %%build:date%%
  */
-rangy.createModule("Util", function(api, module) {
-    api.requireModules( ["WrappedSelection", "WrappedRange"] );
-
+rangy.createModule("Util", ["WrappedSelection"], function(api, module) {
     var rangeProto = api.rangePrototype;
     var selProto = api.selectionPrototype;
 
@@ -70,14 +68,6 @@ rangy.createModule("Util", function(api, module) {
 
     api.selectNodeContents = function(node) {
         api.getSelection().selectNodeContents(node);
-    };
-
-
-    /**
-     * Convenience method to select a range. Any existing selection will be removed.
-     */
-    rangeProto.select = function(direction) {
-        api.getSelection( this.getDocument() ).setSingleRange(this, direction);
     };
 
     rangeProto.selectSelectedTextElements = (function() {
